@@ -95,6 +95,16 @@ label.ghost input{position:absolute;opacity:0;width:1px;height:1px;pointer-event
 .q.skipped .label{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--skip)}
 body.hide-skipped .q.skipped{display:none}
 
+.label-input{width:100%;font:inherit;font-weight:600;font-size:16px;color:var(--ink);background:transparent;border:0;border-bottom:1px dashed var(--line);padding:0 0 2px;border-radius:0}
+.label-input:focus{outline:none;border-bottom-color:var(--accent)}
+.q.skipped .label-input{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--skip)}
+.qbtns{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none}
+.delbtn{border:0;background:transparent;color:var(--muted);font-size:12px;padding:2px 4px;text-decoration:underline;text-underline-offset:3px}
+.delbtn:hover,.delbtn.armed{color:var(--skip)}
+.addq{display:flex;gap:8px;flex-wrap:wrap;padding:16px 0;border-top:1px solid var(--line)}
+.addq input{flex:1 1 240px;min-width:0;font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.addq input:focus{outline:none;border-color:var(--accent)}
+.empty-note{color:var(--muted);font-size:14px;margin:0 0 4px}
 footer{padding-block:40px 60px;color:var(--muted);font-size:13px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px);z-index:20;text-align:center}
 
@@ -232,21 +242,26 @@ function splitQ(full){
   return {label, hint};
 }
 
-const ITEMS = [];
+PARTS.push({id:"custom", roman:"V", title:"Свои вопросы", note:"Добавь вопросы, которых не хватает в анкете. Они попадут в PDF вместе с остальными.", qs:[], custom:true});
+const CUSTOM = PARTS[PARTS.length-1];
+
+let ITEMS = [];
 PARTS.forEach(part => {
   part.items = part.qs.map((raw, i) => {
     let label, hint;
     if (Array.isArray(raw)) { label = raw[0]; hint = raw[1]; }
     else ({label, hint} = splitQ(raw));
-    const it = {id: part.id + "-" + (i+1), n: i+1, label, hint, part};
-    ITEMS.push(it); return it;
+    return {id: part.id + "-" + (i+1), n: i+1, label, hint, part};
   });
 });
+function rebuildItems(){ ITEMS = PARTS.flatMap(p => p.items); }
+rebuildItems();
+function labelOf(it){ return it.custom ? ((S.custom.find(c => c.id === it.id) || {}).label || "").trim() || "Без названия" : it.label; }
 
 // ---------- storage: IndexedDB (photos are heavy), localStorage as fallback ----------
 const KEY = "character-sheet-v2";
-let S = {answers:{}, comments:{}, showComment:{}, photos:{}, skipped:{}, hide:false, blank:false};
-function fresh(){ return {answers:{}, comments:{}, showComment:{}, photos:{}, skipped:{}, hide:S.hide, blank:S.blank}; }
+let S = {answers:{}, comments:{}, showComment:{}, photos:{}, skipped:{}, custom:[], hide:false, blank:false};
+function fresh(){ return {answers:{}, comments:{}, showComment:{}, photos:{}, skipped:{}, custom:[], hide:S.hide, blank:S.blank}; }
 
 let dbp = null;
 function db(){
@@ -305,13 +320,37 @@ PARTS.forEach(part => {
   if (part.note) sec.querySelector(".part-note").textContent = part.note;
   const list = sec.querySelector(".list");
 
-  part.items.forEach(it => {
+  part.list = list;
+  if (part.custom) {
+    const note = document.createElement("p"); note.className = "empty-note"; note.id = "customEmpty";
+    note.textContent = "Пока своих вопросов нет.";
+    const form = document.createElement("form"); form.className = "addq";
+    form.innerHTML = `<input id="newQ" type="text" placeholder="Например: какой у него любимый звук?" aria-label="Текст нового вопроса" autocomplete="off"><button class="btn primary" type="submit">Добавить вопрос</button>`;
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const inp = form.querySelector("#newQ"), text = inp.value.trim();
+      if (!text) { inp.focus(); return; }
+      const id = "custom-" + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+      S.custom.push({id, label: text});
+      inp.value = "";
+      syncCustom(); persist();
+      const el = document.getElementById("q-" + id);
+      if (el) el.querySelector("textarea").focus();
+    });
+    sec.append(note, form);
+  } else {
+    part.items.forEach(it => list.appendChild(makeItem(it)));
+  }
+  partsEl.appendChild(sec);
+});
+
+function makeItem(it){
     const d = document.createElement("div");
     d.className = "q"; d.id = "q-" + it.id;
     d.innerHTML = `<div class="num">${String(it.n).padStart(2,"0")}</div>
       <div class="body">
-        <div class="qhead"><div><p class="label"></p>${it.hint ? '<p class="hint"></p>' : ""}</div>
-          <button type="button" class="skipbtn" aria-pressed="false">Пропустить</button></div>
+        <div class="qhead"><div style="flex:1">${it.custom ? '<input class="label-input" type="text" aria-label="Текст вопроса">' : '<p class="label"></p>'}${it.hint ? '<p class="hint"></p>' : ""}</div>
+          <div class="qbtns"><button type="button" class="skipbtn" aria-pressed="false">Пропустить</button>${it.custom ? '<button type="button" class="delbtn">Удалить</button>' : ""}</div></div>
         <textarea id="ta-${it.id}" rows="1" placeholder="Ответ"></textarea>
         <p class="sub" hidden>Комментарий</p>
         <textarea class="comment" id="cm-${it.id}" rows="1" placeholder="Заметки на полях, идеи, сомнения" hidden></textarea>
@@ -321,11 +360,11 @@ PARTS.forEach(part => {
           <label class="ghost">+ Фото<input type="file" accept="image/*" multiple id="ph-${it.id}"></label>
         </div>
       </div>`;
-    d.querySelector(".label").textContent = it.label;
+    if (!it.custom) d.querySelector(".label").textContent = it.label;
     if (it.hint) d.querySelector(".hint").textContent = it.hint;
     const ta = d.querySelector("#ta-" + it.id), cm = d.querySelector("#cm-" + it.id);
-    ta.setAttribute("aria-label", it.label);
-    cm.setAttribute("aria-label", "Комментарий: " + it.label);
+    ta.setAttribute("aria-label", labelOf(it));
+    cm.setAttribute("aria-label", "Комментарий к вопросу");
 
     ta.addEventListener("input", () => {
       S.answers[it.id] = ta.value; grow(ta);
@@ -365,11 +404,40 @@ PARTS.forEach(part => {
       if (!S.photos[it.id].length) delete S.photos[it.id];
       update(it); persist();
     });
+    if (it.custom) {
+      const li = d.querySelector(".label-input");
+      li.value = labelOf(it) === "Без названия" ? "" : labelOf(it);
+      li.placeholder = "Текст вопроса";
+      li.addEventListener("input", () => {
+        const c = S.custom.find(c => c.id === it.id); if (c) c.label = li.value;
+        ta.setAttribute("aria-label", labelOf(it)); persist();
+      });
+      const del = d.querySelector(".delbtn"); let t;
+      del.addEventListener("click", () => {
+        if (!del.classList.contains("armed")) {
+          del.classList.add("armed"); del.textContent = "Точно удалить?";
+          t = setTimeout(() => { del.classList.remove("armed"); del.textContent = "Удалить"; }, 3500);
+          return;
+        }
+        clearTimeout(t);
+        S.custom = S.custom.filter(c => c.id !== it.id);
+        ["answers","comments","showComment","photos","skipped"].forEach(k => delete S[k][it.id]);
+        syncCustom(); persist();
+      });
+    }
     it.el = d; it.ta = ta; it.cm = cm;
-    list.appendChild(d);
-  });
-  partsEl.appendChild(sec);
-});
+    return d;
+}
+
+function syncCustom(){
+  CUSTOM.items = S.custom.map((c, i) => ({id: c.id, n: i+1, label: c.label, hint: "", part: CUSTOM, custom: true}));
+  rebuildItems();
+  CUSTOM.list.innerHTML = "";
+  CUSTOM.items.forEach(it => { CUSTOM.list.appendChild(makeItem(it)); update(it); });
+  document.getElementById("customEmpty").hidden = CUSTOM.items.length > 0;
+  requestAnimationFrame(() => CUSTOM.items.forEach(it => { grow(it.ta); grow(it.cm); }));
+  stats();
+}
 
 partsEl.addEventListener("click", e => {
   const b = e.target.closest("[data-skipempty]"); if (!b) return;
@@ -403,7 +471,7 @@ function update(it){
     ph.innerHTML = "";
     list.forEach((src, i) => {
       const f = document.createElement("div"); f.className = "ph";
-      const img = document.createElement("img"); img.src = src; img.alt = "Фото к пункту «" + it.label + "»";
+      const img = document.createElement("img"); img.src = src; img.alt = "Фото к пункту «" + labelOf(it) + "»";
       const x = document.createElement("button"); x.type = "button"; x.dataset.i = i; x.textContent = "×"; x.setAttribute("aria-label", "Удалить фото");
       f.append(img, x); ph.appendChild(f);
     });
@@ -430,6 +498,8 @@ function stats(){
 function renderAll(){
   $("optHide").checked = !!S.hide; document.body.classList.toggle("hide-skipped", !!S.hide);
   $("optBlank").checked = !!S.blank;
+  if (!Array.isArray(S.custom)) S.custom = [];
+  syncCustom();
   ITEMS.forEach(update);
   requestAnimationFrame(() => ITEMS.forEach(it => { grow(it.ta); grow(it.cm); }));
 }
@@ -536,12 +606,12 @@ function buildDoc(){
       if (!ans && !com && !ph.length) {
         if (!S.blank) return;
         rows.push({stack:[
-          {text: it.label, style:"q"},
+          {text: labelOf(it), style:"q"},
           ...[0,1,2].map(()=>({canvas:[{type:"line",x1:0,y1:0,x2:W,y2:0,lineWidth:.5,lineColor:RULE}], margin:[0,20,0,0]}))
         ], margin:[0,0,0,14], unbreakable:true});
         return;
       }
-      const st = [{text: it.label, style:"q"}];
+      const st = [{text: labelOf(it), style:"q"}];
       if (ans) st.push({text: ans, style:"a"});
       if (com) st.push({
         table:{widths:[W-12], body:[[{text:[{text:"Комментарий  ", style:"clabel"}, {text:com, style:"c"}], border:[true,false,false,false]}]]},
