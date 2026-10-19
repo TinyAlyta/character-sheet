@@ -16,9 +16,21 @@
   color-scheme:light;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
-@media (prefers-color-scheme: dark){:root{
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#13181A; --surface:#1B2225; --ink:#E6EBEC; --muted:#93A1A6; --line:#2E393D;
   --accent:#4FC2B9; --accent-soft:#163633; --skip:#E0A84A; --skip-soft:#352914; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#13181A; --surface:#1B2225; --ink:#E6EBEC; --muted:#93A1A6; --line:#2E393D;
+  --accent:#4FC2B9; --accent-soft:#163633; --skip:#E0A84A; --skip-soft:#352914; color-scheme:dark}
+header.intro{position:relative}
+.theme{position:absolute;top:16px;right:max(16px,env(safe-area-inset-right,0px));width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0}
+.theme:hover{border-color:var(--accent);color:var(--accent)}
+.theme svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.theme .moon{display:none}
+:root[data-theme="dark"] .theme .sun{display:none} :root[data-theme="dark"] .theme .moon{display:block}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .theme .sun{display:none} :root:not([data-theme="light"]) .theme .moon{display:block}}
+.intro h1,.intro .lede{padding-right:52px}
+.draft-hint{flex-basis:100%;margin:0;font-size:12px}
 
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -118,7 +130,14 @@ html{scroll-behavior:smooth}
 </style>
 </head>
 <body>
+<script>
+  try { const t = localStorage.getItem("character-sheet-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch(e){}
+</script>
 <header class="intro wrap">
+  <button class="theme" id="themeBtn" type="button" aria-label="Сменить тему" title="Сменить тему">
+    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  </button>
   <div class="eyebrow">Досье персонажа</div>
   <h1 id="heroName">Анкета персонажа</h1>
   <p class="lede">Отвечай на то, что важно для этого героя, остальное пропускай. К любому пункту можно добавить комментарий и фото. В PDF попадут только заполненные пункты. Черновик сохраняется в этом браузере автоматически.</p>
@@ -144,8 +163,9 @@ html{scroll-behavior:smooth}
     <label><input type="checkbox" id="optBlank"> Пустые пункты в PDF оставить строками для записи от руки</label>
   </div>
   <div class="draft">
-    <button type="button" class="linkbtn" id="exportBtn">Сохранить черновик в файл</button>
-    <label class="linkbtn" style="cursor:pointer">Открыть черновик из файла<input type="file" id="importInp" accept=".json,application/json" hidden></label>
+    <button type="button" class="linkbtn" id="exportBtn">Скачать черновик</button>
+    <label class="linkbtn" style="cursor:pointer">Загрузить черновик<input type="file" id="importInp" accept=".json,application/json" hidden></label>
+    <p class="draft-hint">Чтобы продолжить на другом устройстве или в другом браузере: скачай черновик здесь, перешли файл себе и загрузи его там.</p>
   </div>
   <div id="parts"></div>
 </main>
@@ -507,6 +527,15 @@ function renderAll(){
 $("optHide").addEventListener("change", e => { S.hide = e.target.checked; document.body.classList.toggle("hide-skipped", S.hide); persist(); });
 $("optBlank").addEventListener("change", e => { S.blank = e.target.checked; persist(); });
 
+// theme toggle: overrides the system theme, remembered in this browser
+$("themeBtn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const cur = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  root.dataset.theme = next;
+  try { localStorage.setItem("character-sheet-theme", next); } catch(e){}
+});
+
 // reset with in-page confirm
 let armT;
 const resetBtn = $("resetBtn");
@@ -542,7 +571,7 @@ $("importInp").addEventListener("change", async e => {
     const data = JSON.parse(await f.text());
     if (!data || data.app !== "character-sheet" || !data.state) throw 0;
     S = Object.assign(fresh(), data.state); renderAll(); persist();
-    toast("Черновик открыт");
+    toast("Черновик загружен");
   } catch(err){ toast("Это не файл черновика анкеты. Нужен .json, сохранённый этой страницей."); }
 });
 
