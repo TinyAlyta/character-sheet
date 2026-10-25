@@ -16,19 +16,30 @@
   color-scheme:light;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]):not([data-theme="beige"]){
   --bg:#13181A; --surface:#1B2225; --ink:#E6EBEC; --muted:#93A1A6; --line:#2E393D;
   --accent:#4FC2B9; --accent-soft:#163633; --skip:#E0A84A; --skip-soft:#352914; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#13181A; --surface:#1B2225; --ink:#E6EBEC; --muted:#93A1A6; --line:#2E393D;
   --accent:#4FC2B9; --accent-soft:#163633; --skip:#E0A84A; --skip-soft:#352914; color-scheme:dark}
+:root[data-theme="beige"]{
+  --bg:#ECE2D2; --surface:#F7F1E6; --ink:#2E261E; --muted:#6F6252; --line:#D8C9B3;
+  --accent:#2F6656; --accent-soft:#DCE3D4; --skip:#A2532B; --skip-soft:#F0DCC8; color-scheme:light}
 header.intro{position:relative}
 .theme{position:absolute;top:16px;right:max(16px,env(safe-area-inset-right,0px));width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0}
 .theme:hover{border-color:var(--accent);color:var(--accent)}
 .theme svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.theme .moon{display:none}
+.theme .moon,.theme .cup{display:none}
 :root[data-theme="dark"] .theme .sun{display:none} :root[data-theme="dark"] .theme .moon{display:block}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .theme .sun{display:none} :root:not([data-theme="light"]) .theme .moon{display:block}}
+:root[data-theme="beige"] .theme .sun{display:none} :root[data-theme="beige"] .theme .cup{display:block}
+@media (prefers-color-scheme: dark){:root:not([data-theme]) .theme .sun{display:none} :root:not([data-theme]) .theme .moon{display:block}}
+.shrug-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:grid;place-items:center;padding:16px}
+.shrug{background:var(--surface);color:var(--ink);border-radius:18px;max-width:360px;width:100%;padding:28px 22px 20px;text-align:center;display:flex;flex-direction:column;gap:10px;animation:wobble .5s ease-out}
+.shrug .face{font-size:40px;line-height:1;font-family:var(--body);letter-spacing:.02em}
+.shrug h3{font-family:var(--display);font-weight:700;font-size:20px;line-height:1.25;margin:0;text-wrap:balance}
+.shrug p{margin:0;color:var(--muted);font-size:14px}
+.shrug .btn{margin-top:6px;padding:11px 14px}
+@keyframes wobble{0%{transform:scale(.85) rotate(-4deg);opacity:0}60%{transform:scale(1.03) rotate(2deg);opacity:1}100%{transform:none}}
 .intro h1,.intro .lede{padding-right:52px}
 .draft-hint{flex-basis:100%;margin:0;font-size:12px}
 
@@ -151,18 +162,19 @@ footer{padding-block:40px 60px;color:var(--muted);font-size:13px}
   .actions{width:100%} .actions .btn{flex:1}
   .photos{grid-template-columns:repeat(3,1fr)}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 html{scroll-behavior:smooth}
 </style>
 </head>
 <body>
 <script>
-  try { const t = localStorage.getItem("character-sheet-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch(e){}
+  try { const t = localStorage.getItem("character-sheet-theme"); if (t === "dark" || t === "light" || t === "beige") document.documentElement.dataset.theme = t; } catch(e){}
 </script>
 <header class="intro wrap">
   <button class="theme" id="themeBtn" type="button" aria-label="Сменить тему" title="Сменить тему">
     <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
     <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+    <svg class="cup" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.6.8-.6 1.7 0 2.5M12 3.5c-.6.8-.6 1.7 0 2.5"/></svg>
   </button>
   <div class="eyebrow">Досье персонажа</div>
   <h1 id="heroName">Анкета персонажа</h1>
@@ -205,6 +217,14 @@ html{scroll-behavior:smooth}
 
 <footer class="wrap">Всё хранится только в твоём браузере: на сервер ничего не отправляется.</footer>
 <div class="toast" id="toast" hidden></div>
+<div class="shrug-bg" id="shrugBg" hidden>
+  <div class="shrug" role="alertdialog" aria-modal="true" aria-labelledby="shrugTitle" aria-describedby="shrugText">
+    <div class="face" aria-hidden="true">¯\_(ツ)_/¯</div>
+    <h3 id="shrugTitle">я хз, че ты хочешь, чтоб я с этим сделал</h3>
+    <p id="shrugText">В этом PDF нет скрытой копии анкеты. Вернуть персонажа можно только из PDF, скачанного с этого сайта после 25 октября.</p>
+    <button class="btn primary" id="shrugOk" type="button">ну ок</button>
+  </div>
+</div>
 <div class="sheet-bg" id="libBg" hidden>
   <div class="sheet lib" role="dialog" aria-modal="true" aria-labelledby="libTitle">
     <div class="lib-head"><h3 id="libTitle">Персонажи</h3><button class="btn" id="libClose" type="button">Закрыть</button></div>
@@ -694,9 +714,11 @@ $("optBlank").addEventListener("change", e => { S.blank = e.target.checked; pers
 $("themeBtn").addEventListener("click", () => {
   const root = document.documentElement;
   const cur = root.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  const next = cur === "dark" ? "light" : "dark";
+  const order = ["light", "beige", "dark"];
+  const next = order[(order.indexOf(cur) + 1) % order.length];
   root.dataset.theme = next;
   try { localStorage.setItem("character-sheet-theme", next); } catch(e){}
+  toast({light:"Тема: светлая", beige:"Тема: бежевая", dark:"Тема: тёмная"}[next]);
 });
 
 // reset with in-page confirm
@@ -827,10 +849,13 @@ async function importFile(f){
     closeLib();
     toast("«" + (charName(st) || "Без имени") + "» добавлен в библиотеку и открыт");
   } catch(err){
-    if (err && err.code === "no-data") toast("В этом PDF нет данных анкеты. Загрузить обратно можно только PDF, скачанные после 25 октября.");
+    if (err && err.code === "no-data") { closeLib(); $("shrugBg").hidden = false; $("shrugOk").focus(); }
     else toast("Не получилось прочитать файл. Нужен PDF или черновик, скачанный с этого сайта.");
   }
 }
+$("shrugOk").addEventListener("click", () => { $("shrugBg").hidden = true; });
+$("shrugBg").addEventListener("click", e => { if (e.target === $("shrugBg")) $("shrugBg").hidden = true; });
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("shrugBg").hidden = true; });
 $("importInp").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
 $("libImport").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
 
