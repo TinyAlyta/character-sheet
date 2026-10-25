@@ -128,6 +128,22 @@ footer{padding-block:40px 60px;color:var(--muted);font-size:13px}
 .sheet .btn{display:block;width:100%;text-align:center;text-decoration:none;padding:12px 14px;font-size:15px}
 .sheet .note{font-size:13px}
 @media (min-width:600px){.sheet-bg{align-items:center}.sheet{border-radius:16px}}
+.count{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.sheet.lib{max-height:88vh;overflow:auto}
+.lib-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lib-head .btn{width:auto;padding:6px 12px;font-size:14px}
+.lib-list{display:flex;flex-direction:column}
+.lib-row{display:flex;gap:10px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.lib-row:last-child{border-bottom:1px solid var(--line)}
+.lib-row .who{flex:1;min-width:0;background:none;border:0;padding:0;text-align:left;color:var(--ink);border-radius:6px}
+.lib-row .who b{display:block;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-row .who span{font-size:13px;color:var(--muted)}
+.lib-row.current .who b::after{content:"открыт";margin-left:8px;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:1px 7px;border-radius:999px;vertical-align:2px}
+.lib-row .mini{flex:none;display:flex;gap:6px}
+.lib-row .mini button{border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;padding:5px 9px;border-radius:999px}
+.lib-row .mini button:hover{border-color:var(--accent);color:var(--accent)}
+.lib-row .mini button.armed{border-color:var(--skip);color:var(--skip);background:var(--skip-soft)}
+.ghostbtn{border-style:dashed!important;color:var(--muted)!important;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px);z-index:20;text-align:center}
 
 @media (max-width:520px){
@@ -166,6 +182,7 @@ html{scroll-behavior:smooth}
       <div class="track"><i class="f" id="tF"></i><i class="s" id="tS"></i></div>
     </div>
     <div class="actions">
+      <button class="btn" id="libBtn" type="button">Персонажи <span id="libCount" class="count"></span></button>
       <button class="btn" id="resetBtn" type="button">Очистить</button>
       <button class="btn primary" id="pdfBtn" type="button">Скачать PDF</button>
     </div>
@@ -179,15 +196,24 @@ html{scroll-behavior:smooth}
     <label><input type="checkbox" id="optBlank"> Пустые пункты в PDF оставить строками для записи от руки</label>
   </div>
   <div class="draft">
-    <button type="button" class="linkbtn" id="exportBtn">Скачать черновик</button>
-    <label class="linkbtn" style="cursor:pointer">Загрузить черновик<input type="file" id="importInp" accept=".json,application/json" hidden></label>
-    <p class="draft-hint">Чтобы продолжить на другом устройстве или в другом браузере: скачай черновик здесь, перешли файл себе и загрузи его там.</p>
+    <label class="linkbtn" style="cursor:pointer">Загрузить персонажа из PDF<input type="file" id="importInp" accept=".pdf,.json,application/pdf,application/json" hidden></label>
+    <button type="button" class="linkbtn" id="exportBtn">Скачать черновик (.json)</button>
+    <p class="draft-hint">Скачанный отсюда PDF можно загрузить обратно: персонаж вернётся в библиотеку со всеми ответами, комментариями и фото. Так же переносишь персонажа на другое устройство.</p>
   </div>
   <div id="parts"></div>
 </main>
 
 <footer class="wrap">Всё хранится только в твоём браузере: на сервер ничего не отправляется.</footer>
 <div class="toast" id="toast" hidden></div>
+<div class="sheet-bg" id="libBg" hidden>
+  <div class="sheet lib" role="dialog" aria-modal="true" aria-labelledby="libTitle">
+    <div class="lib-head"><h3 id="libTitle">Персонажи</h3><button class="btn" id="libClose" type="button">Закрыть</button></div>
+    <button class="btn primary" id="libNew" type="button">+ Новый персонаж</button>
+    <div class="lib-list" id="libList"></div>
+    <label class="btn ghostbtn">Загрузить персонажа из PDF<input type="file" id="libImport" accept=".pdf,.json,application/pdf,application/json" hidden></label>
+    <p class="note">Библиотека хранится в этом браузере. На другом устройстве её не будет: перенеси нужного персонажа через его PDF.</p>
+  </div>
+</div>
 <div class="sheet-bg" id="sheetBg" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h3 id="sheetTitle">PDF готов</h3>
@@ -305,10 +331,13 @@ function rebuildItems(){ ITEMS = PARTS.flatMap(p => p.items); }
 rebuildItems();
 function labelOf(it){ return it.custom ? ((S.custom.find(c => c.id === it.id) || {}).label || "").trim() || "Без названия" : it.label; }
 
-// ---------- storage: IndexedDB (photos are heavy), localStorage as fallback ----------
-const KEY = "character-sheet-v2";
+// ---------- storage: a library of characters in IndexedDB (photos are heavy), localStorage as fallback ----------
+const OLD_KEY = "character-sheet-v2";
 let S = {answers:{}, comments:{}, showComment:{}, photos:{}, skipped:{}, custom:[], hide:false, blank:false};
 function fresh(){ return {answers:{}, comments:{}, showComment:{}, photos:{}, skipped:{}, custom:[], hide:S.hide, blank:S.blank}; }
+let LIB = [];          // [{id, name, updated}]
+let currentId = null;
+function newId(){ return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
 let dbp = null;
 function db(){
@@ -323,29 +352,135 @@ function db(){
   });
   return dbp;
 }
-async function loadState(){
+async function kvGet(k){
   const d = await db();
   if (d) {
     const v = await new Promise(res => {
-      try { const g = d.transaction("kv").objectStore("kv").get(KEY); g.onsuccess = () => res(g.result); g.onerror = () => res(null); }
-      catch(e){ res(null); }
+      try { const g = d.transaction("kv").objectStore("kv").get(k); g.onsuccess = () => res(g.result); g.onerror = () => res(undefined); }
+      catch(e){ res(undefined); }
     });
-    if (v) return v;
+    if (v !== undefined) return v;
   }
-  try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw); } catch(e){}
-  return null;
+  try { const raw = localStorage.getItem("cs:" + k); if (raw) return JSON.parse(raw); } catch(e){}
+  return undefined;
 }
-let saveT, warned = false;
+let warned = false;
+async function kvSet(k, v){
+  const d = await db();
+  if (d) {
+    const ok = await new Promise(res => {
+      try {
+        const tx = d.transaction("kv","readwrite");
+        tx.objectStore("kv").put(JSON.parse(JSON.stringify(v)), k);
+        tx.oncomplete = () => res(true); tx.onerror = () => res(false); tx.onabort = () => res(false);
+      } catch(e){ res(false); }
+    });
+    if (ok) return true;
+  }
+  try { localStorage.setItem("cs:" + k, JSON.stringify(v)); return true; }
+  catch(e){ if (!warned) { warned = true; toast("Браузеру не хватает места. Скачай PDF персонажа, чтобы не потерять ответы."); } return false; }
+}
+async function kvDel(k){
+  const d = await db();
+  if (d) { try { d.transaction("kv","readwrite").objectStore("kv").delete(k); } catch(e){} }
+  try { localStorage.removeItem("cs:" + k); } catch(e){}
+}
+
+function charName(st){ return ((st && st.answers && st.answers["base-1"]) || "").trim(); }
+function countFilled(st){
+  const ids = new Set();
+  ["answers","comments"].forEach(k => Object.entries(st[k]||{}).forEach(([id,v]) => { if ((v||"").trim()) ids.add(id); }));
+  Object.entries(st.photos||{}).forEach(([id,v]) => { if ((v||[]).length) ids.add(id); });
+  Object.keys(st.skipped||{}).forEach(id => ids.delete(id));
+  return ids.size;
+}
+function charState(){ const c = JSON.parse(JSON.stringify(S)); delete c.hide; delete c.blank; return c; }
+
+// save a given character; the entry in the list is updated synchronously so switching never mixes states up
+function saveChar(id, st){
+  if (!id) return Promise.resolve();
+  const e = LIB.find(x => x.id === id);
+  if (e) { e.name = charName(st); e.updated = Date.now(); e.filled = countFilled(st); }
+  const idx = JSON.parse(JSON.stringify(LIB));
+  return kvSet("char:" + id, st).then(() => kvSet("lib-index", idx));
+}
+function saveCurrent(){ return saveChar(currentId, charState()); }
+let saveT;
 function persist(){
   clearTimeout(saveT);
-  saveT = setTimeout(async () => {
-    const d = await db();
-    if (d) {
-      try { d.transaction("kv","readwrite").objectStore("kv").put(JSON.parse(JSON.stringify(S)), KEY); return; } catch(e){}
-    }
-    try { localStorage.setItem(KEY, JSON.stringify(S)); }
-    catch(e){ if (!warned) { warned = true; toast("Браузеру не хватает места для черновика. Сохрани его в файл, чтобы не потерять."); } }
-  }, 300);
+  saveT = setTimeout(saveCurrent, 300);
+  try { localStorage.setItem("cs:settings", JSON.stringify({hide:!!S.hide, blank:!!S.blank})); } catch(e){}
+}
+function flush(){ clearTimeout(saveT); return saveCurrent(); }
+// take a synchronous snapshot of the character being left, then switch at once
+function leaveCurrent(){ clearTimeout(saveT); const id = currentId, st = charState(); return () => saveChar(id, st); }
+
+async function loadLibrary(){
+  LIB = (await kvGet("lib-index")) || [];
+  let settings = {}; try { settings = JSON.parse(localStorage.getItem("cs:settings") || "{}"); } catch(e){}
+  if (!LIB.length) {
+    // first run after the update: turn the old single draft into the first character
+    let old = await kvGet(OLD_KEY);
+    if (!old) { try { const raw = localStorage.getItem(OLD_KEY); if (raw) old = JSON.parse(raw); } catch(e){} }
+    const id = newId();
+    const st = Object.assign(fresh(), old || {});
+    if (old) { settings.hide = settings.hide ?? old.hide; settings.blank = settings.blank ?? old.blank; }
+    delete st.hide; delete st.blank;
+    LIB = [{id, name: charName(st), updated: Date.now(), filled: countFilled(st)}];
+    await kvSet("char:" + id, st);
+    await kvSet("lib-index", LIB);
+  }
+  let cur = await kvGet("lib-current");
+  if (!LIB.some(x => x.id === cur)) cur = LIB.slice().sort((a,b) => b.updated - a.updated)[0].id;
+  currentId = cur;
+  const st = (await kvGet("char:" + cur)) || {};
+  S = Object.assign(fresh(), st, {hide: !!settings.hide, blank: !!settings.blank});
+}
+
+async function openCharacter(id){
+  if (id === currentId) return;
+  const savePrev = leaveCurrent();
+  const p = savePrev();
+  const st = (await kvGet("char:" + id)) || {};
+  await p;
+  S = Object.assign(fresh(), st, {hide:S.hide, blank:S.blank});
+  currentId = id; kvSet("lib-current", id);
+  renderAll(); window.scrollTo({top:0});
+}
+async function addCharacter(st){
+  const savePrev = currentId ? leaveCurrent() : null;
+  const id = newId();
+  S = Object.assign(fresh(), JSON.parse(JSON.stringify(st || {})), {hide:S.hide, blank:S.blank});
+  currentId = id;
+  LIB.push({id, name: charName(S), updated: Date.now(), filled: countFilled(S)});
+  renderAll(); window.scrollTo({top:0});
+  if (savePrev) await savePrev();
+  await saveCurrent(); await kvSet("lib-current", id);
+  return id;
+}
+async function duplicateCharacter(id){
+  let st;
+  if (id === currentId) st = charState();
+  else st = JSON.parse(JSON.stringify((await kvGet("char:" + id)) || {}));
+  st.answers = st.answers || {};
+  st.answers["base-1"] = (charName(st) || "Без имени") + " (копия)";
+  await addCharacter(st);
+}
+async function deleteCharacter(id){
+  if (id === currentId) clearTimeout(saveT);
+  LIB = LIB.filter(x => x.id !== id);
+  await kvDel("char:" + id);
+  if (id === currentId) {
+    currentId = null;
+    if (LIB.length) {
+      const next = LIB.slice().sort((a,b) => b.updated - a.updated)[0].id;
+      const st = (await kvGet("char:" + next)) || {};
+      S = Object.assign(fresh(), st, {hide:S.hide, blank:S.blank});
+      currentId = next; await kvSet("lib-current", next);
+      renderAll();
+    } else { await kvSet("lib-index", LIB); await addCharacter(null); return; }
+  }
+  await kvSet("lib-index", LIB);
 }
 
 // ---------- render ----------
@@ -546,6 +681,7 @@ function renderAll(){
   $("optHide").checked = !!S.hide; document.body.classList.toggle("hide-skipped", !!S.hide);
   $("optBlank").checked = !!S.blank;
   if (!Array.isArray(S.custom)) S.custom = [];
+  updateLibCount();
   syncCustom();
   ITEMS.forEach(update);
   requestAnimationFrame(() => ITEMS.forEach(it => { grow(it.ta); grow(it.cm); }));
@@ -639,18 +775,109 @@ function baseName(){
   return n.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60).trim() || "персонаж";
 }
 $("exportBtn").addEventListener("click", () => {
-  saveBlob(new Blob([JSON.stringify({app:"character-sheet", v:2, state:S})], {type:"application/json"}), baseName() + " — черновик.json", "Черновик готов");
+  saveBlob(new Blob([JSON.stringify({app:"character-sheet", v:3, state:charState()})], {type:"application/json"}), baseName() + " — черновик.json", "Черновик готов");
 });
-$("importInp").addEventListener("change", async e => {
-  const f = e.target.files && e.target.files[0]; e.target.value = "";
-  if (!f) return;
+
+// ---------- the questionnaire travels inside the PDF ----------
+// The data goes after the end of the PDF as comment lines, then the original startxref/%%EOF is repeated,
+// so PDF readers still find the same document while this page can read the answers back.
+function bytesToB64(bytes){
+  let bin = ""; const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  return btoa(bin);
+}
+function b64ToBytes(b64){
+  const bin = atob(b64), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function embedState(pdfBlob){
+  const buf = new Uint8Array(await pdfBlob.arrayBuffer());
+  const tail = new TextDecoder("latin1").decode(buf.subarray(Math.max(0, buf.length - 200)));
+  const m = tail.match(/startxref\s+(\d+)\s+%%EOF\s*$/);
+  if (!m) return pdfBlob;
+  const json = JSON.stringify({app:"character-sheet", v:3, state:charState()});
+  const b64 = bytesToB64(new TextEncoder().encode(json));
+  let lines = "\n%CHARSHEET-BEGIN\n";
+  for (let i = 0; i < b64.length; i += 120) lines += "%" + b64.slice(i, i + 120) + "\n";
+  lines += "%CHARSHEET-END\nstartxref\n" + m[1] + "\n%%EOF\n";
+  return new Blob([buf, lines], {type:"application/pdf"});
+}
+async function readCharacterFile(file){
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const head = new TextDecoder("latin1").decode(buf.subarray(0, 5));
+  let data;
+  if (head === "%PDF-") {
+    const text = new TextDecoder("latin1").decode(buf);
+    const a = text.lastIndexOf("%CHARSHEET-BEGIN"), b = text.lastIndexOf("%CHARSHEET-END");
+    if (a < 0 || b < a) throw {code:"no-data"};
+    const b64 = text.slice(a + 16, b).split("\n").map(l => l.replace(/^%/, "").trim()).join("");
+    data = JSON.parse(new TextDecoder().decode(b64ToBytes(b64)));
+  } else {
+    data = JSON.parse(new TextDecoder().decode(buf));
+  }
+  if (!data || data.app !== "character-sheet" || !data.state) throw {code:"bad"};
+  const st = data.state; delete st.hide; delete st.blank;
+  return st;
+}
+async function importFile(f){
   try {
-    const data = JSON.parse(await f.text());
-    if (!data || data.app !== "character-sheet" || !data.state) throw 0;
-    S = Object.assign(fresh(), data.state); renderAll(); persist();
-    toast("Черновик загружен");
-  } catch(err){ toast("Это не файл черновика анкеты. Нужен .json, сохранённый этой страницей."); }
-});
+    const st = await readCharacterFile(f);
+    await addCharacter(st);
+    closeLib();
+    toast("«" + (charName(st) || "Без имени") + "» добавлен в библиотеку и открыт");
+  } catch(err){
+    if (err && err.code === "no-data") toast("В этом PDF нет данных анкеты. Загрузить обратно можно только PDF, скачанные после 25 октября.");
+    else toast("Не получилось прочитать файл. Нужен PDF или черновик, скачанный с этого сайта.");
+  }
+}
+$("importInp").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
+$("libImport").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
+
+// ---------- library dialog ----------
+const fmtDate = t => { try { return new Date(t).toLocaleDateString("ru-RU", {day:"numeric", month:"short"}); } catch(e){ return ""; } };
+function renderLib(){
+  const list = $("libList"); list.innerHTML = "";
+  LIB.slice().sort((a,b) => b.updated - a.updated).forEach(e => {
+    const row = document.createElement("div");
+    row.className = "lib-row" + (e.id === currentId ? " current" : "");
+    const who = document.createElement("button"); who.type = "button"; who.className = "who";
+    const b = document.createElement("b"); b.textContent = e.name || "Без имени";
+    const sp = document.createElement("span"); sp.textContent = `Заполнено ${e.filled || 0} · изменён ${fmtDate(e.updated)}`;
+    who.append(b, sp);
+    who.addEventListener("click", async () => { await openCharacter(e.id); closeLib(); });
+    const mini = document.createElement("div"); mini.className = "mini";
+    const dup = document.createElement("button"); dup.type = "button"; dup.textContent = "Копия";
+    dup.setAttribute("aria-label", "Сделать копию: " + (e.name || "Без имени"));
+    dup.addEventListener("click", async () => { await duplicateCharacter(e.id); closeLib(); toast("Копия создана и открыта"); });
+    const del = document.createElement("button"); del.type = "button"; del.textContent = "Удалить";
+    del.setAttribute("aria-label", "Удалить: " + (e.name || "Без имени"));
+    let t;
+    del.addEventListener("click", async () => {
+      if (!del.classList.contains("armed")) {
+        del.classList.add("armed"); del.textContent = "Точно?";
+        t = setTimeout(() => { del.classList.remove("armed"); del.textContent = "Удалить"; }, 3500);
+        return;
+      }
+      clearTimeout(t);
+      await deleteCharacter(e.id); renderLib(); updateLibCount();
+      toast("Персонаж удалён");
+    });
+    mini.append(dup, del);
+    row.append(who, mini);
+    list.appendChild(row);
+  });
+}
+function updateLibCount(){ $("libCount").textContent = LIB.length; }
+async function openLib(){ await flush(); renderLib(); $("libBg").hidden = false; $("libNew").focus(); }
+function closeLib(){ $("libBg").hidden = true; updateLibCount(); }
+$("libBtn").addEventListener("click", openLib);
+$("libClose").addEventListener("click", closeLib);
+$("libBg").addEventListener("click", e => { if (e.target === $("libBg")) closeLib(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("libBg").hidden) closeLib(); });
+$("libNew").addEventListener("click", async () => { await addCharacter(null); closeLib(); toast("Новый персонаж создан. Предыдущий сохранён в библиотеке."); });
+window.addEventListener("pagehide", () => { clearTimeout(saveT); saveCurrent(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(saveT); saveCurrent(); } });
 
 // downscale photos so the draft and PDF stay light
 function shrink(file){
@@ -758,7 +985,8 @@ pdfBtn.addEventListener("click", async () => {
   if (!count && !S.blank) { toast("Пока нечего сохранять: заполни хотя бы один пункт."); return; }
   pdfBtn.disabled = true; const old = pdfBtn.textContent; pdfBtn.textContent = "Собираю…";
   try {
-    const blob = await new Promise((res, rej) => { try { pdfMake.createPdf(dd).getBlob(res); } catch(e){ rej(e); } });
+    const raw = await new Promise((res, rej) => { try { pdfMake.createPdf(dd).getBlob(res); } catch(e){ rej(e); } });
+    const blob = await embedState(raw);
     const filename = baseName() + " — анкета.pdf";
     // inside a Claude artifact, use its save dialog; on a normal site, a regular download
     const dl = window.claude && window.claude.use ? await window.claude.use("downloads").catch(() => null) : null;
@@ -770,10 +998,7 @@ pdfBtn.addEventListener("click", async () => {
   } finally { pdfBtn.disabled = false; pdfBtn.textContent = old; }
 });
 
-loadState().then(v => {
-  if (v) S = Object.assign(fresh(), v);
-  renderAll();
-});
+loadLibrary().then(renderAll, () => renderAll());
 </script>
 </body>
 </html>
